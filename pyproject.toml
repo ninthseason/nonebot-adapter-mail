@@ -10,6 +10,8 @@ packages = [{include = "nonebot"}]
 [tool.poetry.dependencies]
 python = "^3.8"
 nonebot2 = "^2.0.0"
+aiosmtplib = "^2.0.2"
+aioimaplib = "^1.0.1"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.12.0"
