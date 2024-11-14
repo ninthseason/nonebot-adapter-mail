@@ -1,128 +1,79 @@
-from enum import Enum
-from typing import Dict, Type, Tuple
+from typing import Optional
+from typing_extensions import override
 
-from nonebot.typing import overrides
 from nonebot.utils import escape_tag
-
+from nonebot.compat import model_dump
 from nonebot.adapters import Event as BaseEvent
 
-from .api import Mail, User
+from .model import Mail
 from .message import Message
-from .api import Message as MailMessage
-
-
-class EventType(str, Enum):
-    # Init Event
-    READY = "READY"
-    RESUMED = "RESUMED"
-
-    # MAIL_MESSAGES
-    MESSAGE_CREATE = "MESSAGE_CREATE"
 
 
 class Event(BaseEvent):
-    __type__: EventType
 
-    @overrides(BaseEvent)
+    @override
     def get_event_name(self) -> str:
-        return self.__type__
+        return self.get_type()
 
-    @overrides(BaseEvent)
+    @override
     def get_event_description(self) -> str:
-        return escape_tag(str(self.dict()))
+        return escape_tag(str(model_dump(self)))
 
-    @overrides(BaseEvent)
+    @override
     def get_message(self) -> Message:
         raise ValueError("Event has no message!")
 
-    @overrides(BaseEvent)
+    @override
     def get_user_id(self) -> str:
         raise ValueError("Event has no context!")
 
-    @overrides(BaseEvent)
+    @override
     def get_session_id(self) -> str:
         raise ValueError("Event has no context!")
 
-    @overrides(BaseEvent)
+    @override
     def is_tome(self) -> bool:
         return False
 
 
-# Meta Event
-class MetaEvent(Event):
-    @overrides(BaseEvent)
-    def get_type(self) -> str:
-        return "meta_event"
-
-
-class ReadyEvent(MetaEvent):
-    __type__ = EventType.READY
-    version: int
-    session_id: str
-    user: User
-    shard: Tuple[int, int]
-
-
-class ResumedEvent(MetaEvent):
-    __type__ = EventType.RESUMED
-
-
-# Mail Event
-class MailEvent(Event, Mail):
-    op_user_id: str
-
-    @overrides(BaseEvent)
-    def get_type(self) -> str:
-        return "notice"
-
-
 # Message Event
-class MessageEvent(Event, MailMessage):
+class MessageEvent(Event, Mail):
     to_me: bool = False
 
-    @overrides(BaseEvent)
+    @override
     def get_type(self) -> str:
         return "message"
 
-    @overrides(Event)
-    def get_user_id(self) -> str:
-        return str(self.author.id)  # type: ignore
-
-    @overrides(Event)
-    def get_session_id(self) -> str:
-        return str(self.author.id)  # type: ignore
-
-    @overrides(BaseEvent)
-    def get_event_description(self) -> str:
-        return escape_tag(
-            f"Message {self.id} from {getattr(self.author, 'username', None)}<{getattr(self.author, 'id', None)}>: {self.get_message()}"
-        )
-
-    @overrides(Event)
-    def get_message(self) -> Message:
-        if not hasattr(self, "_message"):
-            setattr(self, "_message", Message.from_mail_message(self))
-        return getattr(self, "_message")
-
-    @overrides(Event)
+    @override
     def is_tome(self) -> bool:
         return self.to_me
 
 
-class MessageCreateEvent(MessageEvent):
-    __type__ = EventType.MESSAGE_CREATE
+class NewMailMessageEvent(MessageEvent):
+    reply: Optional[Mail] = None
 
+    @override
+    def get_user_id(self) -> str:
+        return str(self.sender.id)
 
-event_classes: Dict[str, Type[Event]] = {
-    EventType.READY.value: ReadyEvent,
-    EventType.RESUMED.value: ResumedEvent,
-    EventType.MESSAGE_CREATE.value: MessageCreateEvent,
-}
+    @override
+    def get_session_id(self) -> str:
+        return str(self.sender.id)
+
+    @override
+    def get_event_description(self) -> str:
+        return escape_tag(
+            f"Message {self.id} from {self.sender.name}<{self.sender.id}>: "
+            f"{self.get_message()}"
+        )
+
+    @override
+    def get_message(self) -> Message:
+        return self.message
+
 
 __all__ = [
-    "EventType",
     "Event",
-    "MailEvent",
     "MessageEvent",
-    "MessageCreateEvent",
+    "NewMailMessageEvent",
 ]

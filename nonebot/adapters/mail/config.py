@@ -1,6 +1,4 @@
-from typing import List
-
-from pydantic import Field, HttpUrl, BaseModel
+from pydantic import Field, EmailStr, BaseModel, SecretStr
 
 
 class HostInfo(BaseModel):
@@ -10,14 +8,16 @@ class HostInfo(BaseModel):
 
 
 class BotInfo(BaseModel):
-    user: str = Field(alias="id")
-    password: str = Field(alias="token")
-    smtp: HostInfo = Field(alias="smtp")
+    id: EmailStr = Field(alias="id")
+    name: str = Field(alias="name")
+    password: SecretStr = Field(alias="password")
+    subject: str = Field(alias="subject")
     imap: HostInfo = Field(alias="imap")
+    smtp: HostInfo = Field(alias="smtp")
 
 
 class Config(BaseModel):
-    mail_bots: List[BotInfo] = Field(default_factory=list)
+    mail_bots: list[BotInfo] = Field(default_factory=list)
 
     class Config:
         extra = "ignore"

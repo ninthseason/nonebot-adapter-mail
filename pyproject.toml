@@ -103,5 +103,5 @@ adapters = [
     {name = "Mail", module_name = "nonebot.adapters.mail"}
 ]
 plugins = []
-plugin_dirs = []
+plugin_dirs = ["plugins"]
 builtin_plugins = []
