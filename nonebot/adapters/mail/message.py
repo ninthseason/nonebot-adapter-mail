@@ -1,4 +1,6 @@
-from typing import Union
+from io import BytesIO
+from pathlib import Path
+from typing import Union, Optional
 from collections.abc import Iterable
 from typing_extensions import override
 
@@ -51,17 +53,21 @@ class MessageSegment(BaseMessageSegment["Message"]):
 
     @staticmethod
     def attachment(
+        data: Union[bytes, BytesIO, Path],
         name: str,
-        binary: bool,
-        content: str,
-        content_type: str,
+        content_type: Optional[str],
     ) -> "Attachment":
+        if isinstance(data, Path):
+            data_bytes = data.read_bytes()
+        elif isinstance(data, BytesIO):
+            data_bytes = data.getvalue()
+        else:
+            data_bytes = data
         return Attachment(
             "attachment",
             {
+                "data": data_bytes,
                 "name": name,
-                "binary": binary,
-                "content": content,
                 "content_type": content_type,
             },
         )

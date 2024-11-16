@@ -25,8 +25,8 @@ class ActionFailed(BaseActionFailed, MailAdapterException):
         self,
         response: Union[tuple[str, ImapResponse], dict[str, SMTPResponse]],
     ):
-        self.type: Literal["IMAP", "SMTP"]
-        self.response: dict[str, Response]
+        self.type: Literal["IMAP", "SMTP"] = "IMAP"
+        self.response: dict[str, Response] = {}
         if (
             isinstance(response, tuple)
             and isinstance(response[0], str)

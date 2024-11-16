@@ -1,23 +1,21 @@
 import email.message
 import email.mime.multipart
-from collections.abc import Sequence
 from typing_extensions import override
 from typing import TYPE_CHECKING, Any, Union, NoReturn, Optional
 
 import aioimaplib
 import aiosmtplib
-import mailparser
 
 from nonebot.utils import escape_tag
 from nonebot.message import handle_event
 from nonebot.adapters import Bot as BaseBot
 
 from .log import log
+from .model import Mail
 from .config import BotInfo
-from .model import Mail, User
 from .message import Message, MessageSegment
-from .utils import escape_bytelines, extract_mail_parts
 from .event import Event, MessageEvent, NewMailMessageEvent
+from .utils import parse_byte_mail, escape_bytelines, extract_mail_parts
 from .exception import ActionFailed, NetworkError, UninitializedException
 
 if TYPE_CHECKING:
@@ -57,76 +55,6 @@ async def _check_reply(
         )
 
 
-def parse_byte_mail(byte_mail: bytes) -> Mail:
-    """
-    Parse the mail and return the Mail object.
-
-    :param mail: The mail to parse.
-    :return: The Mail object.
-    """
-    mail = mailparser.parse_from_bytes(byte_mail)
-
-    return Mail(
-        id=str(mail.message_id),
-        sender=User(
-            id=mail.from_[0][1],
-            name=mail.from_[0][0],
-        ),
-        recipients_to=[
-            User(
-                id=recipient[1],
-                name=recipient[0],
-            )
-            for recipient in mail.to
-        ],
-        recipients_cc=[
-            User(
-                id=recipient[1],
-                name=recipient[0],
-            )
-            for recipient in mail.headers.get("Cc", [])
-        ],
-        recipients_bcc=[
-            User(
-                id=recipient[1],
-                name=recipient[0],
-            )
-            for recipient in mail.headers.get("Bcc", [])
-        ],
-        date=mail.date,
-        timezone=float(mail.timezone) if mail.timezone else None,
-        message=(
-            Message([MessageSegment.text(text) for text in mail.text_plain])
-            + Message(
-                [
-                    MessageSegment.attachment(
-                        attachment["filename"],
-                        attachment["binary"],
-                        attachment["payload"],
-                        attachment["mail_content_type"],
-                    )
-                    for attachment in mail.attachments
-                ]
-            )
-        ),
-        original_message=(
-            Message([MessageSegment.html(html) for html in mail.text_html])
-            + Message(
-                [
-                    MessageSegment.attachment(
-                        attachment["filename"],
-                        attachment["binary"],
-                        attachment["payload"],
-                        attachment["mail_content_type"],
-                    )
-                    for attachment in mail.attachments
-                ],
-            )
-        ),
-        in_reply_to=str(mail.in_reply_to) if mail.in_reply_to else None,
-    )
-
-
 class Bot(BaseBot):
     @override
     def __init__(self, adapter: "Adapter", self_id: str, bot_info: BotInfo):
@@ -154,11 +82,15 @@ class Bot(BaseBot):
         """
         Send a message to the event.
 
-        - event: The event to reply.
-        - message: The message to send.
+        - `event`: The event to reply.
+        - `message`: The message to send.
+        - `subject`: The subject of the mail.
+        - `in_reply_to`: The Message-ID of the mail to reply to.
         """
         if not isinstance(event, MessageEvent):
-            raise ValueError("event is not a MessageEvent")
+            raise RuntimeError("Event cannot be replied to!")
+        subject = kwargs.get("subject")
+        in_reply_to = kwargs.get("in_reply_to")
         if isinstance(message, str):
             message = Message([MessageSegment.text(message)])
         elif isinstance(message, MessageSegment):
@@ -166,30 +98,63 @@ class Bot(BaseBot):
         await self.send_mail(
             message=message,
             recipients=[event.sender.id],
+            subject=subject,
+            in_reply_to=in_reply_to,
+        )
+
+    async def send_to(
+        self,
+        recipient: Union[str, list[str]],
+        message: Union[str, Message, MessageSegment],
+        subject: Optional[str] = None,
+        in_reply_to: Optional[str] = None,
+    ) -> None:
+        """
+        Send a mail to the given recipient(s).
+
+        - `recipient`: The recipient(s) to send the mail to.
+        - `message`: The message to send.
+        - `subject`: The subject of the mail.
+        - `in_reply_to`: The Message-ID of the mail to reply to.
+        """
+        recipients = [recipient] if isinstance(recipient, str) else recipient
+        if isinstance(message, str):
+            message = Message([MessageSegment.text(message)])
+        elif isinstance(message, MessageSegment):
+            message = Message([message])
+        await self.send_mail(
+            message=message,
+            subject=subject,
+            recipients=recipients,
+            in_reply_to=in_reply_to,
         )
 
     async def send_mail(
         self,
         message: Union[Message, email.message.EmailMessage],
         subject: Optional[str] = None,
-        recipients: Optional[Sequence[str]] = None,
+        recipients: Optional[list[str]] = None,
+        in_reply_to: Optional[str] = None,
     ) -> None:
         """
         Send a mail to the given recipients.
 
-        - message: The message to send.
-        - subject: The subject of the mail.
-        - recipients: The list of recipients.
+        - `message`: The message to send.
+        - `subject`: The subject of the mail.
+        - `recipients`: The list of recipients.
+        - `in_reply_to`: The Message-ID of the mail to reply to.
         """
         if not subject:
             subject = self.bot_info.subject
         if isinstance(message, Message):
             if not recipients:
-                raise ValueError("recipients_to is required when sending a Message")
+                raise ValueError("recipients is required when sending a Message")
             _message = email.mime.multipart.MIMEMultipart()
             _message["From"] = self.bot_info.id
             _message["To"] = ", ".join(recipients)
             _message["Subject"] = subject
+            if in_reply_to:
+                _message["In-Reply-To"] = in_reply_to
             parts = extract_mail_parts(message)
             for part in parts:
                 _message.attach(part)
@@ -213,7 +178,22 @@ class Bot(BaseBot):
                     f"{escape_tag(str(e))}"
                 ),
             )
-            raise NetworkError()
+            if isinstance(e, aiosmtplib.SMTPRecipientsRefused):
+                raise ActionFailed(
+                    {
+                        i.recipient: aiosmtplib.SMTPResponse(i.code, i.message)
+                        for i in e.recipients
+                    }
+                )
+            elif isinstance(e, aiosmtplib.SMTPResponseException):
+                raise ActionFailed(
+                    {self.bot_info.id: aiosmtplib.SMTPResponse(e.code, e.message)}
+                )
+            elif isinstance(e, aiosmtplib.SMTPException):
+                raise NetworkError()
+            else:
+                raise e
+
         log(
             "TRACE",
             (
@@ -284,7 +264,7 @@ class Bot(BaseBot):
         """
         Select the mailbox on the IMAP server.
 
-        - mailbox: The mailbox to select. Default is "INBOX".
+        - `mailbox`: The mailbox to select. Default is "INBOX".
         """
         if not self.imap_client:
             raise UninitializedException("IMAP client")
@@ -353,7 +333,7 @@ class Bot(BaseBot):
         """
         Get the mail of the given UID from the current mailbox.
 
-        - mail_uid: The UID of the mail to fetch.
+        - `mail_uid`: The UID of the mail to fetch.
         """
         if not self.imap_client:
             raise UninitializedException("IMAP client")
@@ -403,8 +383,8 @@ class Bot(BaseBot):
         """
         Get the mail of the given Message-ID from the given mailbox.
 
-        - mail_id: The Message-ID of the mail to search for.
-        - mailbox: The mailbox to search in. Default is "INBOX".
+        - `mail_id`: The Message-ID of the mail to search for.
+        - `mailbox`: The mailbox to search in. Default is "INBOX".
         """
         if not self.imap_client:
             raise UninitializedException("IMAP client")
@@ -456,7 +436,7 @@ class Bot(BaseBot):
         """
         Get the mail of the given Message-ID from the INBOX or Sent mailboxes.
 
-        - mail_id: The Message-ID of the mail to search for.
+        - `mail_id`: The Message-ID of the mail to search for.
         """
         if not self.imap_client or not self.imap_client.protocol:
             raise UninitializedException("IMAP client")
