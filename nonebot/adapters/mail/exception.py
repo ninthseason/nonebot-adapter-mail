@@ -1,9 +1,8 @@
 from typing import Union, Literal, Optional, TypedDict
 
 from aiosmtplib.response import SMTPResponse
-from aioimaplib import Response as ImapResponse
-
 from nonebot.exception import AdapterException
+from aioimaplib import Response as ImapResponse
 from nonebot.exception import ActionFailed as BaseActionFailed
 from nonebot.exception import NetworkError as BaseNetworkError
 from nonebot.exception import NoLogException as BaseNoLogException

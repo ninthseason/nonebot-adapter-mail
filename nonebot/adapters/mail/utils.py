@@ -6,7 +6,6 @@ import email.mime.base
 import email.mime.text
 
 import mailparser
-
 from nonebot.utils import escape_tag
 
 from .model import Mail, User

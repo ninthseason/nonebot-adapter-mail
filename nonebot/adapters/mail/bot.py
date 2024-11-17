@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING, Any, Union, NoReturn, Optional
 
 import aioimaplib
 import aiosmtplib
-
 from nonebot.utils import escape_tag
 from nonebot.message import handle_event
+
 from nonebot.adapters import Bot as BaseBot
 
 from .log import log

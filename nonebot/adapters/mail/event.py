@@ -3,6 +3,7 @@ from typing_extensions import override
 
 from nonebot.utils import escape_tag
 from nonebot.compat import model_dump
+
 from nonebot.adapters import Event as BaseEvent
 
 from .model import Mail

@@ -3,10 +3,10 @@ from typing import Any
 from typing_extensions import override
 
 from aioimaplib import aioimaplib
-
 from nonebot.drivers import Driver
 from nonebot.utils import escape_tag
 from nonebot.compat import model_dump
+
 from nonebot.adapters import Adapter as BaseAdapter
 
 from .bot import Bot
