@@ -48,7 +48,7 @@ def extract_mail_parts(message: Message) -> list[email.message.EmailMessage]:
     else:
         parts.append(email.mime.text.MIMEText(text))
     for attachment in attachments:
-        if "/" in attachment.data["content_type"]:
+        if attachment.data["content_type"] and "/" in attachment.data["content_type"]:
             main_type, sub_type = attachment.data["content_type"].split("/")
         else:
             main_type, sub_type = "application", "octet-stream"

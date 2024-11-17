@@ -55,7 +55,7 @@ class MessageSegment(BaseMessageSegment["Message"]):
     def attachment(
         data: Union[bytes, BytesIO, Path],
         name: str,
-        content_type: Optional[str],
+        content_type: Optional[str] = None,
     ) -> "Attachment":
         if isinstance(data, Path):
             data_bytes = data.read_bytes()
