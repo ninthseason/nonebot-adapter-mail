@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-adapter-mail"
-version = "0.1.0"
+version = "1.0.0-alpha.1"
 description = "Mail adapter for nonebot2"
 authors = [
     {name = "mobyw", email = "mobyw66@gmail.com"},
@@ -97,11 +97,3 @@ includes = ["nonebot"]
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
-
-[tool.nonebot]
-adapters = [
-    {name = "Mail", module_name = "nonebot.adapters.mail"}
-]
-plugins = []
-plugin_dirs = ["plugins"]
-builtin_plugins = []

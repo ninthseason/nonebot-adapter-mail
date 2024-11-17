@@ -26,3 +26,47 @@ _✨ Mail Adapter ✨_
 </p>
 
 </div>
+
+## Configuration
+
+Config mail adapter by modifying the `.env` or `.env.*` file.
+
+### MAIL_BOTS
+
+- `id`: The email address of the bot.
+- `name`: The name of the bot.
+- `password`: The password of the bot.
+- `subject`: The default subject of the email.
+- `imap`: The IMAP configuration of the bot.
+  - `host`: The IMAP host.
+  - `port`: The IMAP port.
+  - `tls`: Whether to use TLS.
+- `smtp`: The SMTP configuration of the bot.
+  - `host`: The SMTP host.
+  - `port`: The SMTP port.
+  - `tls`: Whether to use TLS.
+
+Example:
+
+```dotenv
+MAIL_BOTS='
+[
+  {
+    "id": "i@example.com",
+    "name": "Name",
+    "password": "p4ssw0rd",
+    "subject": "Sent by NoneBot",
+    "imap": {
+      "host": "imap.example.com",
+      "port": 993,
+      "tls": true
+    },
+    "smtp": {
+      "host": "smtp.example.com",
+      "port": 465,
+      "tls": true
+    }
+  }
+]
+'
+```
