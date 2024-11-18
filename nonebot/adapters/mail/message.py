@@ -1,8 +1,9 @@
 from io import BytesIO
 from pathlib import Path
-from typing import Union, Optional
+from dataclasses import dataclass
 from collections.abc import Iterable
 from typing_extensions import override
+from typing import TYPE_CHECKING, Union, Optional, TypedDict
 
 from nonebot.adapters import Message as BaseMessage
 from nonebot.adapters import MessageSegment as BaseMessageSegment
@@ -73,7 +74,15 @@ class MessageSegment(BaseMessageSegment["Message"]):
         )
 
 
+class _TextData(TypedDict):
+    text: str
+
+
+@dataclass
 class Text(MessageSegment):
+    if TYPE_CHECKING:
+        data: _TextData  # pyright: ignore[reportGeneralTypeIssues]
+
     @override
     def __str__(self) -> str:
         return self.data["text"]
@@ -83,16 +92,34 @@ class Text(MessageSegment):
         return True
 
 
+class _HtmlData(TypedDict):
+    html: str
+
+
+@dataclass
 class Html(MessageSegment):
+    if TYPE_CHECKING:
+        data: _HtmlData  # pyright: ignore[reportGeneralTypeIssues]
+
     @override
     def __str__(self) -> str:
         return f"[html:{self.data['html']}]"
 
 
+class _AttachmentData(TypedDict):
+    data: bytes
+    name: str
+    content_type: Optional[str]
+
+
+@dataclass
 class Attachment(MessageSegment):
+    if TYPE_CHECKING:
+        data: _AttachmentData  # pyright: ignore[reportGeneralTypeIssues]
+
     @override
     def __str__(self) -> str:
-        return f"[attachment:{self.data['name']}]"
+        return f"[attachment:{self.data['name']}, ...]"
 
 
 class Message(BaseMessage[MessageSegment]):
