@@ -1,3 +1,4 @@
+import asyncio
 import email.message
 import email.mime.multipart
 from typing_extensions import override
@@ -232,6 +233,30 @@ class Bot(BaseBot):
                     f"<y>Bot {escape_tag(self.self_id)}</y> "
                     "<r><bg #f8bbd0>"
                     f"error in logging in: "
+                    f"{escape_bytelines(response.lines)}"
+                    "</bg #f8bbd0></r>"
+                ),
+            )
+            return False
+        # report id to avoid unsafe in 163 mails
+        assert self.imap_client.protocol is not None
+        response = await asyncio.wait_for(
+            self.imap_client.protocol.execute(
+                aioimaplib.Command(
+                    "ID",
+                    self.imap_client.protocol.new_tag(),
+                    '("name" "nonebot" "version" "2")',
+                )
+            ),
+            self.imap_client.timeout,
+        )
+        if not response.result == "OK":
+            log(
+                "ERROR",
+                (
+                    f"<y>Bot {escape_tag(self.self_id)}</y> "
+                    "<r><bg #f8bbd0>"
+                    f"error in reporting client ID: "
                     f"{escape_bytelines(response.lines)}"
                     "</bg #f8bbd0></r>"
                 ),
