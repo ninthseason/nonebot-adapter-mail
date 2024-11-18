@@ -522,5 +522,3 @@ $RECYCLE.BIN/
 ## Project Specific
 # Ignore all .env files
 .env*
-nonebot/
-!nonebot/adapters/mail
