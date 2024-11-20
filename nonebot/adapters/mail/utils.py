@@ -91,46 +91,56 @@ def parse_byte_mail(byte_mail: bytes) -> Mail:
 
     - `byte_mail`: The byte mail to parse.
     """
+
     mail = mailparser.parse_from_bytes(byte_mail)
+
+    sender = User(
+        id=mail.from_[0][1],
+        name=mail.from_[0][0],
+    )
+    recipients_to = [
+        User(
+            id=recipient[1],
+            name=recipient[0],
+        )
+        for recipient in mail.to
+    ]
+    recipients_cc = [
+        User(
+            id=recipient[1],
+            name=recipient[0],
+        )
+        for recipient in mail.headers.get("Cc", [])
+    ]
+    recipients_bcc = [
+        User(
+            id=recipient[1],
+            name=recipient[0],
+        )
+        for recipient in mail.headers.get("Bcc", [])
+    ]
+    message = Message(
+        [MessageSegment.text(text) for text in mail.text_plain]
+    ) + Message([parse_attachment(attachment) for attachment in mail.attachments])
+    original_message = Message(
+        [MessageSegment.html(html) for html in mail.text_html]
+    ) + Message(
+        [parse_attachment(attachment) for attachment in mail.attachments],
+    )
+
+    if str(message) == "":
+        # no plain text provided by the mail
+        message = Message([MessageSegment.text("")])
 
     return Mail(
         id=str(mail.message_id),
-        sender=User(
-            id=mail.from_[0][1],
-            name=mail.from_[0][0],
-        ),
-        recipients_to=[
-            User(
-                id=recipient[1],
-                name=recipient[0],
-            )
-            for recipient in mail.to
-        ],
-        recipients_cc=[
-            User(
-                id=recipient[1],
-                name=recipient[0],
-            )
-            for recipient in mail.headers.get("Cc", [])
-        ],
-        recipients_bcc=[
-            User(
-                id=recipient[1],
-                name=recipient[0],
-            )
-            for recipient in mail.headers.get("Bcc", [])
-        ],
+        sender=sender,
+        recipients_to=recipients_to,
+        recipients_cc=recipients_cc,
+        recipients_bcc=recipients_bcc,
         date=mail.date,
         timezone=float(mail.timezone) if mail.timezone else None,
-        message=(
-            Message([MessageSegment.text(text) for text in mail.text_plain])
-            + Message([parse_attachment(attachment) for attachment in mail.attachments])
-        ),
-        original_message=(
-            Message([MessageSegment.html(html) for html in mail.text_html])
-            + Message(
-                [parse_attachment(attachment) for attachment in mail.attachments],
-            )
-        ),
+        message=message,
+        original_message=original_message,
         in_reply_to=str(mail.in_reply_to) if mail.in_reply_to else None,
     )
