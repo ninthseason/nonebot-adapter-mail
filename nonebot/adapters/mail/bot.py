@@ -283,6 +283,7 @@ class Bot(BaseBot):
                 ),
             )
             return False
+        await self.imap_client.close()
         return True
 
     async def select_mailbox(self, mailbox: str = "INBOX") -> bool:
