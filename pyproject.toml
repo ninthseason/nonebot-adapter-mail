@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-adapter-mail"
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 description = "Mail adapter for nonebot2"
 authors = [
     {name = "mobyw", email = "mobyw66@gmail.com"},
