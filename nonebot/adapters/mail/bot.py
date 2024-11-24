@@ -78,6 +78,7 @@ class Bot(BaseBot):
         self,
         event: Event,
         message: Union[str, Message, MessageSegment],
+        reply: Optional[bool] = False,
         **kwargs,
     ) -> Any:
         """
@@ -85,77 +86,116 @@ class Bot(BaseBot):
 
         - `event`: The event to reply.
         - `message`: The message to send.
-        - `subject`: The subject of the mail.
-        - `in_reply_to`: The Message-ID of the mail to reply to.
+        - `reply`: Whether using default reply settings.
+        - `kwargs`: Other arguments.
+            - `cc`: The list of CC recipients.
+            - `bcc`: The list of BCC recipients.
+            - `subject`: The subject of the mail.
+            - `in_reply_to`: The Message ID of the mail to reply to.
+            - `references`: The list of Message IDs of the mails in the thread.
+            - `reply_to`: The list of addresses to recommend recipients to reply to.
         """
         if not isinstance(event, MessageEvent):
             raise RuntimeError("Event cannot be replied to!")
-        subject = kwargs.get("subject")
-        in_reply_to = kwargs.get("in_reply_to")
         if isinstance(message, str):
             message = Message([MessageSegment.text(message)])
         elif isinstance(message, MessageSegment):
             message = Message([message])
+        if reply:
+            if kwargs.get("subject") is None:
+                kwargs["subject"] = f"Re: {event.subject}"
+            if kwargs.get("in_reply_to") is None:
+                kwargs["in_reply_to"] = event.id
+            if kwargs.get("references") is None:
+                kwargs["references"] = [event.id]
         await self.send_mail(
             message=message,
-            recipients=[event.sender.id],
-            subject=subject,
-            in_reply_to=in_reply_to,
+            recipient=event.sender.id,
+            **kwargs,
         )
 
     async def send_to(
         self,
         recipient: Union[str, list[str]],
         message: Union[str, Message, MessageSegment],
-        subject: Optional[str] = None,
-        in_reply_to: Optional[str] = None,
+        **kwargs,
     ) -> None:
         """
         Send a mail to the given recipient(s).
 
         - `recipient`: The recipient(s) to send the mail to.
         - `message`: The message to send.
-        - `subject`: The subject of the mail.
-        - `in_reply_to`: The Message-ID of the mail to reply to.
+        - `kwargs`: Other arguments.
+            - `cc`: The list of CC recipients.
+            - `bcc`: The list of BCC recipients.
+            - `subject`: The subject of the mail.
+            - `in_reply_to`: The Message ID of the mail to reply to.
+            - `references`: The list of Message IDs of the mails in the thread.
+            - `reply_to`: The list of addresses to recommend recipients to reply to.
         """
-        recipients = [recipient] if isinstance(recipient, str) else recipient
+        recipient = [recipient] if isinstance(recipient, str) else recipient
         if isinstance(message, str):
             message = Message([MessageSegment.text(message)])
         elif isinstance(message, MessageSegment):
             message = Message([message])
         await self.send_mail(
             message=message,
-            subject=subject,
-            recipients=recipients,
-            in_reply_to=in_reply_to,
+            recipient=recipient,
+            **kwargs,
         )
 
     async def send_mail(
         self,
         message: Union[Message, email.message.EmailMessage],
+        recipient: Union[str, list[str], None] = None,
+        cc: Union[str, list[str], None] = None,
+        bcc: Union[str, list[str], None] = None,
         subject: Optional[str] = None,
-        recipients: Optional[list[str]] = None,
         in_reply_to: Optional[str] = None,
+        references: Union[str, list[str], None] = None,
+        reply_to: Union[str, list[str], None] = None,
     ) -> None:
         """
         Send a mail to the given recipients.
 
         - `message`: The message to send.
         - `subject`: The subject of the mail.
-        - `recipients`: The list of recipients.
-        - `in_reply_to`: The Message-ID of the mail to reply to.
+        - `recipients`: The list of recipients to send the mail to.
+        - `cc`: The list of CC recipients.
+        - `bcc`: The list of BCC recipients.
+        - `in_reply_to`: The Message ID of the mail to reply to.
+        - `references`: The list of Message IDs of the mails in the thread.
+        - `reply_to`: The list of addresses to recommend recipients to reply to.
         """
         if not subject:
             subject = self.bot_info.subject
         if isinstance(message, Message):
-            if not recipients:
-                raise ValueError("recipients is required when sending a Message")
+            if not recipient:
+                raise ValueError("recipient is required when sending a Message")
             _message = email.mime.multipart.MIMEMultipart()
-            _message["From"] = self.bot_info.id
-            _message["To"] = ", ".join(recipients)
+            _message["From"] = f"{self.bot_info.name} <{self.bot_info.id}>"
+            _message["To"] = (
+                ", ".join(recipient) if isinstance(recipient, list) else recipient
+            )
+            if cc:
+                _message["Cc"] = ", ".join(cc) if isinstance(cc, list) else cc
+            if bcc:
+                _message["Bcc"] = ", ".join(bcc) if isinstance(bcc, list) else bcc
             _message["Subject"] = subject
             if in_reply_to:
                 _message["In-Reply-To"] = in_reply_to
+            if references:
+                _message["References"] = (
+                    ", ".join(references)
+                    if isinstance(references, list)
+                    else references
+                )
+            elif in_reply_to:
+                _message["References"] = in_reply_to
+            if reply_to:
+                _message["Reply-To"] = (
+                    ", ".join(reply_to) if isinstance(reply_to, list) else reply_to
+                )
             parts = extract_mail_parts(message)
             for part in parts:
                 _message.attach(part)
@@ -199,7 +239,7 @@ class Bot(BaseBot):
             "TRACE",
             (
                 f"<y>Bot {escape_tag(self.self_id)}</y> "
-                f"mail sent to {escape_tag(str(recipients))}: "
+                f"mail sent to {escape_tag(str(recipient))}: "
                 + escape_tag(str(response))
             ),
         )

@@ -92,33 +92,26 @@ def parse_byte_mail(byte_mail: bytes) -> Mail:
     - `byte_mail`: The byte mail to parse.
     """
 
+    def parse_user(user):
+        return User(
+            id=user[1],
+            name=user[0],
+        )
+
     mail = mailparser.parse_from_bytes(byte_mail)
 
     sender = User(
         id=mail.from_[0][1],
         name=mail.from_[0][0],
     )
-    recipients_to = [
-        User(
-            id=recipient[1],
-            name=recipient[0],
-        )
-        for recipient in mail.to
-    ]
-    recipients_cc = [
-        User(
-            id=recipient[1],
-            name=recipient[0],
-        )
-        for recipient in mail.headers.get("Cc", [])
-    ]
-    recipients_bcc = [
-        User(
-            id=recipient[1],
-            name=recipient[0],
-        )
-        for recipient in mail.headers.get("Bcc", [])
-    ]
+    if isinstance(mail.subject, str):
+        subject = mail.subject
+    else:
+        subject = str(mail.subject[0]) if mail.subject else ""
+    recipients_to = [parse_user(u) for u in mail.to]
+    recipients_cc = [parse_user(u) for u in mail.headers.get("Cc", [])]
+    recipients_bcc = [parse_user(u) for u in mail.headers.get("Bcc", [])]
+    reply_to = [parse_user(u) for u in mail.headers.get("Reply-To", [])]
     message = Message(
         [MessageSegment.text(text) for text in mail.text_plain]
     ) + Message([parse_attachment(attachment) for attachment in mail.attachments])
@@ -135,6 +128,7 @@ def parse_byte_mail(byte_mail: bytes) -> Mail:
     return Mail(
         id=str(mail.message_id),
         sender=sender,
+        subject=subject,
         recipients_to=recipients_to,
         recipients_cc=recipients_cc,
         recipients_bcc=recipients_bcc,
@@ -143,4 +137,10 @@ def parse_byte_mail(byte_mail: bytes) -> Mail:
         message=message,
         original_message=original_message,
         in_reply_to=str(mail.in_reply_to) if mail.in_reply_to else None,
+        references=(
+            [str(reference) for reference in mail.references]
+            if mail.references
+            else None
+        ),
+        reply_to=reply_to if reply_to else None,
     )
