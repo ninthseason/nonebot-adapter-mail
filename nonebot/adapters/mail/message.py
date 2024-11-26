@@ -73,6 +73,22 @@ class MessageSegment(BaseMessageSegment["Message"]):
             },
         )
 
+    @classmethod
+    def subject(cls, subject: str) -> "MessageSegment":
+        return cls("subject", {"subject": subject})
+
+    @classmethod
+    def reply(cls, id: str) -> "MessageSegment":
+        return cls("reply", {"id": id})
+
+    @classmethod
+    def cc(cls, id: str) -> "MessageSegment":
+        return cls("cc", {"id": id})
+
+    @classmethod
+    def bcc(cls, id: str) -> "MessageSegment":
+        return cls("bcc", {"id": id})
+
 
 class _TextData(TypedDict):
     text: str

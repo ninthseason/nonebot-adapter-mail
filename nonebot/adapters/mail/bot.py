@@ -78,7 +78,7 @@ class Bot(BaseBot):
         self,
         event: Event,
         message: Union[str, Message, MessageSegment],
-        reply: Optional[bool] = False,
+        reply: Optional[bool] = None,
         **kwargs,
     ) -> Any:
         """
@@ -101,6 +101,11 @@ class Bot(BaseBot):
             message = Message([MessageSegment.text(message)])
         elif isinstance(message, MessageSegment):
             message = Message([message])
+        if "reply" in message:
+            reply_id = message["reply", 0].data.get("id")
+            if reply_id == event.id:
+                reply = True if reply is None else reply
+                message = message.exclude("reply")
         if reply:
             if kwargs.get("subject") is None:
                 kwargs["subject"] = f"Re: {event.subject}"
@@ -167,21 +172,35 @@ class Bot(BaseBot):
         - `references`: The list of Message IDs of the mails in the thread.
         - `reply_to`: The list of addresses to recommend recipients to reply to.
         """
-        if not subject:
-            subject = self.bot_info.subject
         if isinstance(message, Message):
             if not recipient:
                 raise ValueError("recipient is required when sending a Message")
+            if "subject" in message and subject is None:
+                subject = message["subject", 0].data["subject"]
+            if "reply" in message:
+                reply_id = message["reply", 0].data["id"]
+                if subject is None:
+                    reply_mail = await self.get_mail_of_id(str(reply_id))
+                    reply_subject = reply_mail.subject if reply_mail else None
+                    subject = f"Re: {reply_subject}" if reply_subject else None
+                in_reply_to = str(reply_id) if in_reply_to is None else in_reply_to
+                references = [str(reply_id)] if references is None else references
+            cc = [cc] if isinstance(cc, str) else cc if cc else []
+            bcc = [bcc] if isinstance(bcc, str) else bcc if bcc else []
+            for segment in message["cc"]:
+                cc.append(segment.data["id"])
+            for segment in message["bcc"]:
+                bcc.append(segment.data["id"])
             _message = email.mime.multipart.MIMEMultipart()
             _message["From"] = f"{self.bot_info.name} <{self.bot_info.id}>"
             _message["To"] = (
                 ", ".join(recipient) if isinstance(recipient, list) else recipient
             )
             if cc:
-                _message["Cc"] = ", ".join(cc) if isinstance(cc, list) else cc
+                _message["Cc"] = ", ".join(cc)
             if bcc:
-                _message["Bcc"] = ", ".join(bcc) if isinstance(bcc, list) else bcc
-            _message["Subject"] = subject
+                _message["Bcc"] = ", ".join(bcc)
+            _message["Subject"] = subject or self.bot_info.subject
             if in_reply_to:
                 _message["In-Reply-To"] = in_reply_to
             if references:
@@ -447,9 +466,9 @@ class Bot(BaseBot):
         self, mail_id: str, mailbox: str = "INBOX"
     ) -> Optional[Mail]:
         """
-        Get the mail of the given Message-ID from the given mailbox.
+        Get the mail of the given Message ID from the given mailbox.
 
-        - `mail_id`: The Message-ID of the mail to search for.
+        - `mail_id`: The Message ID of the mail to search for.
         - `mailbox`: The mailbox to search in. Default is "INBOX".
         """
         if not self.imap_client:
@@ -500,9 +519,9 @@ class Bot(BaseBot):
 
     async def get_mail_of_id(self, mail_id: str) -> Optional[Mail]:
         """
-        Get the mail of the given Message-ID from the INBOX or Sent mailboxes.
+        Get the mail of the given Message ID from the INBOX or Sent mailboxes.
 
-        - `mail_id`: The Message-ID of the mail to search for.
+        - `mail_id`: The Message ID of the mail to search for.
         """
         if not self.imap_client or not self.imap_client.protocol:
             raise UninitializedException("IMAP client")
