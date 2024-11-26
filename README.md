@@ -27,26 +27,26 @@ _✨ Mail Adapter ✨_
 
 </div>
 
-## Configuration
+## 配置
 
-Config mail adapter by modifying the `.env` or `.env.*` file.
+修改 `.env` 或 `.env.*` 文件以配置 Mail 适配器。
 
 ### MAIL_BOTS
 
-- `id`: The email address of the bot.
-- `name`: The name of the bot.
-- `password`: The password of the bot.
-- `subject`: The default subject of the email.
-- `imap`: The IMAP configuration of the bot.
-  - `host`: The IMAP host.
-  - `port`: The IMAP port.
-  - `tls`: Whether to use TLS.
-- `smtp`: The SMTP configuration of the bot.
-  - `host`: The SMTP host.
-  - `port`: The SMTP port.
-  - `tls`: Whether to use TLS.
+- `id`: 电子邮件地址
+- `name`: 显示名称
+- `password`: 登录密码
+- `subject`: 默认邮件主题
+- `imap`: IMAP 配置
+  - `host`: IMAP 主机
+  - `port`: IMAP 端口
+  - `tls`: 是否使用 TLS
+- `smtp`: SMTP 配置
+  - `host`: SMTP 主机
+  - `port`: SMTP 端口
+  - `tls`: 是否使用 TLS
 
-Example:
+配置示例：
 
 ```dotenv
 MAIL_BOTS='
@@ -70,3 +70,24 @@ MAIL_BOTS='
 ]
 '
 ```
+
+## 适配器默认行为
+
+- 邮件主题按以下优先级解析：
+  1. 调用发送时传入的 `subject` 参数
+  2. 消息中的 `MessageSegment.subject` 段
+  3. 回复时使用 `Re: 原邮件主题`
+  4. 使用配置中的默认 `subject`
+- 发送函数可选参数：
+  - `cc`: 抄送列表
+  - `bcc`: 密送列表
+  - `subject`: 邮件主题
+  - `in_reply_to`: 所回复的邮件的 Message ID
+  - `references`: 邮件线程中的邮件 Message ID 列表
+  - `reply_to`: 接收方回复邮件时的默认地址列表
+- 发送函数中未指定 `references` 但已指定 `in_reply_to` 时，`references` 默认设置为 `in_reply_to`
+- 快捷发送函数 `bot.send` 的 `reply=True` 时的配置：
+  - `subject` 未指定时使用 `Re: 原邮件主题`
+  - `in_reply_to` 未指定时使用原邮件的 Message ID
+  - `references` 未指定时使用原邮件的 Message ID
+- 消息中含有多个 `MessageSegment.subject` 或 `MessageSegment.reply` 时，只取第一个
