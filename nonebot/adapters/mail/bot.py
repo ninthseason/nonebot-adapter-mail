@@ -40,7 +40,7 @@ async def _check_reply(
     if not isinstance(event, NewMailMessageEvent) or event.in_reply_to is None:
         return
     try:
-        event.reply = await bot.get_mail_of_id(
+        event.reply = await bot.fetch_mail_of_id(
             mail_id=event.in_reply_to,
         )
         if event.reply and event.reply.sender.id == bot.bot_info.id:
@@ -62,6 +62,8 @@ class Bot(BaseBot):
         super().__init__(adapter, self_id)
         self.bot_info: BotInfo = bot_info
         self.imap_client: Optional[aioimaplib.IMAP4] = None
+        self.mailbox: Optional[str] = None
+        self.readonly: bool = False
 
     @override
     def __getattr__(self, name: str) -> NoReturn:
@@ -180,7 +182,7 @@ class Bot(BaseBot):
             if "reply" in message:
                 reply_id = message["reply", 0].data["id"]
                 if subject is None:
-                    reply_mail = await self.get_mail_of_id(str(reply_id))
+                    reply_mail = await self.fetch_mail_of_id(str(reply_id))
                     reply_subject = reply_mail.subject if reply_mail else None
                     subject = f"Re: {reply_subject}" if reply_subject else None
                 in_reply_to = str(reply_id) if in_reply_to is None else in_reply_to
@@ -345,7 +347,9 @@ class Bot(BaseBot):
         await self.imap_client.close()
         return True
 
-    async def select_mailbox(self, mailbox: str = "INBOX") -> bool:
+    async def select_mailbox(
+        self, mailbox: str = "INBOX", readonly: bool = False
+    ) -> bool:
         """
         Select the mailbox on the IMAP server.
 
@@ -355,8 +359,13 @@ class Bot(BaseBot):
             raise UninitializedException("IMAP client")
         if mailbox.startswith('"') and mailbox.endswith('"'):
             mailbox = mailbox[1:-1]
-        response = await self.imap_client.select(
-            mailbox if " " not in mailbox else f'"{mailbox}"'
+        mailbox = mailbox if " " not in mailbox else f'"{mailbox}"'
+        if self.mailbox == mailbox and self.readonly == readonly:
+            return True
+        response = (
+            await self.imap_client.select(mailbox)
+            if not readonly
+            else await self.imap_client.examine(mailbox)
         )
         if not response.result == "OK":
             log(
@@ -365,6 +374,8 @@ class Bot(BaseBot):
                     f"<y>Bot {escape_tag(self.self_id)}</y> "
                     "<r><bg #f8bbd0>"
                     f"error in selecting mailbox: "
+                    if not readonly
+                    else "error in examining mailbox: "
                     f"{escape_bytelines(response.lines)}"
                     "</bg #f8bbd0></r>"
                 ),
@@ -374,47 +385,15 @@ class Bot(BaseBot):
             "TRACE",
             (
                 f"<y>Bot {escape_tag(self.self_id)}</y> "
-                f"mailbox {escape_tag(mailbox)} selected: "
+                f"mailbox {escape_tag(mailbox)} selected ({readonly=}): "
                 + escape_bytelines(response.lines)
             ),
         )
+        self.mailbox = mailbox
+        self.readonly = readonly
         return True
 
-    async def get_unseen_uids(self) -> list[str]:
-        """
-        Get the UIDs of unseen mails in current mailbox.
-        """
-        if not self.imap_client:
-            raise UninitializedException("IMAP client")
-        response = await self.imap_client.search("UNSEEN")
-        if response.result != "OK":
-            log(
-                "ERROR",
-                (
-                    f"<y>Bot {escape_tag(self.self_id)}</y> "
-                    "<r><bg #f8bbd0>"
-                    "error in fetching unseen mails: "
-                    f"{escape_bytelines(response.lines)}"
-                    "</bg #f8bbd0></r>"
-                ),
-            )
-            raise ActionFailed((self.self_id, response))
-        if len(response.lines) > 0 and response.lines[0]:
-            log(
-                "TRACE",
-                (
-                    f"<y>Bot {escape_tag(self.self_id)}</y> "
-                    f"unseen mail UIDs: {escape_bytelines(response.lines)}"
-                ),
-            )
-        else:
-            log(
-                "TRACE",
-                f"<y>Bot {escape_tag(self.self_id)}</y> no unseen mails",
-            )
-        return response.lines[0].decode().split()
-
-    async def get_mail_of_uid(self, mail_uid: str) -> Optional[Mail]:
+    async def fetch_mail_of_uid(self, mail_uid: str) -> Optional[Mail]:
         """
         Get the mail of the given UID from the current mailbox.
 
@@ -462,7 +441,65 @@ class Bot(BaseBot):
         mail = parse_byte_mail(response.lines[1])
         return mail
 
-    async def get_mail_of_id_in_mailbox(
+    async def fetch_mail_list(self, key: str = "ALL") -> list[Mail]:
+        """
+        Fetch mails in current mailbox with the given IMAP search key.
+
+        Note:
+
+        - This will mark the mails as seen.
+        - The default key is "ALL".
+        - Available keys: https://www.rfc-editor.org/rfc/rfc3501#section-6.4.4
+        """
+        if not self.imap_client:
+            raise UninitializedException("IMAP client")
+        response = await self.imap_client.search(key)
+        if response.result != "OK":
+            log(
+                "ERROR",
+                (
+                    f"<y>Bot {escape_tag(self.self_id)}</y> "
+                    "<r><bg #f8bbd0>"
+                    "error in fetching seen mails: "
+                    f"{escape_bytelines(response.lines)}"
+                    "</bg #f8bbd0></r>"
+                ),
+            )
+            raise ActionFailed((self.self_id, response))
+        if len(response.lines) > 0 and response.lines[0]:
+            log(
+                "TRACE",
+                (
+                    f"<y>Bot {escape_tag(self.self_id)}</y> "
+                    f"seen mail UIDs: {escape_bytelines(response.lines)}"
+                ),
+            )
+        else:
+            log(
+                "TRACE",
+                f"<y>Bot {escape_tag(self.self_id)}</y> no seen mails",
+            )
+        mail_uids = response.lines[0].decode().split()
+        mails: list[Mail] = []
+        for mail_uid in mail_uids:
+            mail = await self.fetch_mail_of_uid(mail_uid)
+            if mail:
+                mails.append(mail)
+        return mails
+
+    async def fetch_seen_mail_list(self) -> list[Mail]:
+        """
+        Fetch seen mails in current mailbox.
+        """
+        return await self.fetch_mail_list("SEEN")
+
+    async def fetch_unseen_mail_list(self) -> list[Mail]:
+        """
+        Fetch unseen mails in current mailbox and mark them as seen.
+        """
+        return await self.fetch_mail_list("UNSEEN")
+
+    async def fetch_mail_of_id_in_mailbox(
         self, mail_id: str, mailbox: str = "INBOX"
     ) -> Optional[Mail]:
         """
@@ -515,9 +552,9 @@ class Bot(BaseBot):
             )
             return None
         mail_uid = response.lines[0].decode()
-        return await self.get_mail_of_uid(mail_uid)
+        return await self.fetch_mail_of_uid(mail_uid)
 
-    async def get_mail_of_id(self, mail_id: str) -> Optional[Mail]:
+    async def fetch_mail_of_id(self, mail_id: str) -> Optional[Mail]:
         """
         Get the mail of the given Message ID from the INBOX or Sent mailboxes.
 
@@ -533,7 +570,7 @@ class Bot(BaseBot):
             ),
         )
         # try to get mail from INBOX
-        mail = await self.get_mail_of_id_in_mailbox(mail_id)
+        mail = await self.fetch_mail_of_id_in_mailbox(mail_id)
         if mail:
             return mail
         # try to get mail from Sent
@@ -557,11 +594,11 @@ class Bot(BaseBot):
             if i.startswith(b"(\\Sent)")
         ]
         for mailbox in sent_mailbox_list:
-            mail = await self.get_mail_of_id_in_mailbox(mail_id, mailbox)
+            mail = await self.fetch_mail_of_id_in_mailbox(mail_id, mailbox)
             if mail:
                 break
         # switch back to INBOX
-        await self.imap_client.select("INBOX")
+        await self.select_mailbox()
         return mail
 
     async def handle_event(self, event: Event) -> None:

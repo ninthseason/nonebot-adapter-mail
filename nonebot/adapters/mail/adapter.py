@@ -115,13 +115,21 @@ class Adapter(BaseAdapter):
             await asyncio.sleep(RECONNECT_INTERVAL)
 
     async def _fetch_new_mail(self, bot: Bot):
+        if bot.mailbox != "INBOX":
+            log(
+                "TRACE",
+                f"<y>Bot {escape_tag(bot.self_id)}</y> is not in INBOX, skip fetching",
+            )
+            return
+        if bot.readonly:
+            log(
+                "TRACE",
+                f"<y>Bot {escape_tag(bot.self_id)}</y> is readonly, skip fetching",
+            )
+            return
         # Search for unseen mails
-        mail_uids = await bot.get_unseen_uids()
-        for mail_uid in mail_uids:
-            # Fetch the mail
-            mail = await bot.get_mail_of_uid(mail_uid)
-            if not mail:
-                continue
+        mails = await bot.fetch_unseen_mail_list()
+        for mail in mails:
             # Handle the mail as an event
             event = NewMailMessageEvent(**model_dump(mail))
             task = asyncio.create_task(bot.handle_event(event))
