@@ -1,10 +1,9 @@
+from typing import Optional
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel
 
-if TYPE_CHECKING:
-    from .message import Message
+from .message import Message
 
 
 class User(BaseModel):
