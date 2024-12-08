@@ -12,6 +12,10 @@ class User(BaseModel):
 
 
 class Mail(BaseModel):
+    uid: str
+    """
+    Mail UID in IMAP server
+    """
     id: str
     """
     Mail Message ID

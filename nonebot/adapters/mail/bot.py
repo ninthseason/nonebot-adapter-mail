@@ -438,7 +438,7 @@ class Bot(BaseBot):
                 ),
             )
             return None
-        mail = parse_byte_mail(response.lines[1])
+        mail = parse_byte_mail(mail_uid, response.lines[1])
         return mail
 
     async def fetch_mail_list(self, key: str = "ALL") -> list[Mail]:
@@ -553,6 +553,46 @@ class Bot(BaseBot):
             return None
         mail_uid = response.lines[0].decode()
         return await self.fetch_mail_of_uid(mail_uid)
+
+    async def see_mail_of_id(self, mail_uid: str) -> Optional[Mail]:
+        """
+        Mark the mail of the given Message ID from the INBOX Seen.
+
+        - `mail_id`: The Message ID of the mail to mark as Seen.
+
+        Note:
+        
+        - Though method `fetch_mail_list` said that "This will mark the mails as seen."
+        - But it seems that it is not the case in qq mail at least
+        - It seems that `fetch_mail_list` only send IMAP command `SEARCH` and `FETCH` to IMAP server
+        - But neither `SEARCH` nor `FETCH` would mark mail as Seen in my opinion(may be wrong, but i really didn't find any related description in RFC)
+        - It may depends on IMAP server configuration(chatgpt's opinion)
+        - So it may need a method to explicitly mark mail as Seen
+        - then I can manully mark mail as Seen in plugin's message handle function when use qq mail
+        - Unfortunately, because the method need mail_uid, and mail_uid doesn't record in event class, so can't get it in handler function
+        - So i have to tweak a few other function and class: `Mail`, `parse_byte_mail`, `fetch_mail_of_uid`
+        """
+        if not self.imap_client or not self.imap_client.protocol:
+            raise UninitializedException("IMAP client")
+        log(
+            "TRACE",
+            (
+                f"<y>Bot {escape_tag(self.self_id)}</y> "
+                f"seeing mail ID: {escape_tag(mail_uid)}"
+            ),
+        )
+        response = await self.imap_client.store(mail_uid, '+FLAGS', '\\Seen')
+        if response.result != "OK":
+            log(
+                "ERROR",
+                (
+                    f"<y>Bot {escape_tag(self.self_id)}</y> "
+                    "<r><bg #f8bbd0>"
+                    "error in mark mail Seen"
+                    "</bg #f8bbd0></r>"
+                ),
+            )
+            raise ActionFailed((self.self_id, response))
 
     async def fetch_mail_of_id(self, mail_id: str) -> Optional[Mail]:
         """

@@ -85,7 +85,7 @@ def parse_attachment(attachment) -> Attachment:
     )
 
 
-def parse_byte_mail(byte_mail: bytes) -> Mail:
+def parse_byte_mail(mail_uid: str, byte_mail: bytes) -> Mail:
     """
     Parse the mail and return the Mail object.
 
@@ -126,6 +126,7 @@ def parse_byte_mail(byte_mail: bytes) -> Mail:
         message = Message([MessageSegment.text("")])
 
     return Mail(
+        uid=mail_uid,
         id=str(mail.message_id),
         sender=sender,
         subject=subject,
